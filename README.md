@@ -53,7 +53,7 @@ shipyard {
 }
 ```
 
-`registryHost` defaults to `ghcr.io`. The plugin auto-prefixes `imageRepo` with the host when it lacks one, so the example above pushes to `ghcr.io/your-org/your-service`. Pass an already-qualified repo (`docker.io/...`, `registry.gitlab.com/...`) to override.
+`registryHost` defaults to `ghcr.io`. The plugin auto-prefixes `imageRepo` with the host when it lacks one, so the example above pushes to `ghcr.io/your-org/your-service`. Pass an already-qualified repo (`docker.io/...`, `registry.gitlab.com/...`) and `registryHost` is derived from it — no need to set it twice.
 
 That is the minimum config for GHCR. Make sure `Dockerfile` exists at the project root.
 
@@ -107,7 +107,7 @@ All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 | `initialVersion` | `String` | `"0.1.0"` | Used when no matching tag exists yet. |
 | `tagPrefix` | `String` | `"v"` | Prefix for SemVer git tags. Set to `""` for bare `1.2.3` tags. |
 | `gitRemote` | `String` | `"origin"` | Remote `pushTag` pushes to. |
-| `registryHost` | `String` | `"ghcr.io"` | Argument for `docker login`. Change for Docker Hub, GitLab, etc. |
+| `registryHost` | `String` | `"ghcr.io"` | Fallback host for `docker login` and the auto-prefix. Ignored if `imageRepo` already contains a host segment. |
 | `registryUserEnv` | `String` | `"GHCR_USER"` | Env var name the plugin reads for the registry username. |
 | `registryTokenEnv` | `String` | `"GHCR_TOKEN"` | Env var name for the registry token / password (read via stdin). |
 | `dockerBin` | `String` | `"docker"` | Path or name of the docker CLI. |
@@ -132,12 +132,29 @@ Format: bare `KEY=value` lines, optional `export ` prefix, `#` comments, single 
 
 ## Examples
 
+### GHCR (GitHub Container Registry)
+
+This is the default. The plugin assumes GHCR unless `imageRepo` carries a different host.
+
+```kotlin
+shipyard {
+    imageRepo = "your-org/your-service"
+}
+```
+
+```bash
+export GHCR_USER=your-user
+export GHCR_TOKEN=ghp_xxx        # PAT with write:packages scope
+./gradlew ship
+```
+
+In GitHub Actions use `${{ github.actor }}` and `${{ secrets.GITHUB_TOKEN }}` — no PAT needed. See [CI tips](#ci-tips).
+
 ### Docker Hub
 
 ```kotlin
 shipyard {
     imageRepo = "docker.io/yarallex/api"
-    registryHost = "docker.io"
     registryUserEnv = "DOCKERHUB_USER"
     registryTokenEnv = "DOCKERHUB_TOKEN"
 }
@@ -145,18 +162,35 @@ shipyard {
 
 ```bash
 export DOCKERHUB_USER=yarallex
-export DOCKERHUB_TOKEN=dckr_pat_xxx
+export DOCKERHUB_TOKEN=dckr_pat_xxx        # https://hub.docker.com/settings/security
 ./gradlew ship
 ```
 
-### GitLab Container Registry + Spring Boot
+`registryHost` is auto-derived from `imageRepo` — no need to set it explicitly.
+
+### GitLab Container Registry
 
 ```kotlin
 shipyard {
-    imageRepo = "acme/api"
-    registryHost = "registry.gitlab.com"
+    imageRepo = "registry.gitlab.com/acme/api"
     registryUserEnv = "GITLAB_USER"
     registryTokenEnv = "GITLAB_TOKEN"
+}
+```
+
+```bash
+export GITLAB_USER=your-user
+export GITLAB_TOKEN=glpat_xxx              # personal/deploy token, scope: write_registry
+./gradlew ship
+```
+
+### Spring Boot project (any registry)
+
+Add `buildTaskName` so the fat JAR is built before `dockerBuild`:
+
+```kotlin
+shipyard {
+    imageRepo = "ghcr.io/acme/api"
     buildTaskName = "bootJar"
     initialVersion = "1.0.0"
     tagPrefix = "release-"

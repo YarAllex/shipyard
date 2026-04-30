@@ -47,4 +47,29 @@ class ImageRefTest {
     fun `returns repo as-is when host is blank`() {
         assertEquals("acme/api", ImageRef.qualify("acme/api", ""))
     }
+
+    @Test
+    fun `extractHost returns null when no host segment`() {
+        kotlin.test.assertNull(ImageRef.extractHost("acme/api"))
+    }
+
+    @Test
+    fun `extractHost recognises docker hub host`() {
+        assertEquals("docker.io", ImageRef.extractHost("docker.io/acme/api"))
+    }
+
+    @Test
+    fun `extractHost recognises localhost with port`() {
+        assertEquals("localhost:5000", ImageRef.extractHost("localhost:5000/acme/api"))
+    }
+
+    @Test
+    fun `effectiveHost prefers explicit host in repo`() {
+        assertEquals("docker.io", ImageRef.effectiveHost("docker.io/acme/api", "ghcr.io"))
+    }
+
+    @Test
+    fun `effectiveHost falls back to registryHost when repo has none`() {
+        assertEquals("ghcr.io", ImageRef.effectiveHost("acme/api", "ghcr.io"))
+    }
 }

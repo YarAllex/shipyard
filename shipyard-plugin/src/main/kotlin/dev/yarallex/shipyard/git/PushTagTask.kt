@@ -59,7 +59,7 @@ abstract class PushTagTask : DefaultTask() {
     }
 
     private fun buildErrorMessage(remote: String, tag: String, remoteUrl: String?, stderr: String): String {
-        val hint = remoteUrl?.let(::authHintFor) ?: GENERIC_AUTH_HINT
+        val hint = hintFor(remoteUrl, stderr)
         return buildString {
             appendLine("git push $remote $tag failed.")
             if (remoteUrl != null) appendLine("Remote URL: $remoteUrl")
@@ -73,13 +73,42 @@ abstract class PushTagTask : DefaultTask() {
         }.trimEnd()
     }
 
-    private fun authHintFor(url: String): String = when {
-        url.startsWith("git@") || url.startsWith("ssh://") -> SSH_HINT
-        url.startsWith("http://") || url.startsWith("https://") -> HTTPS_HINT
-        else -> GENERIC_AUTH_HINT
+    private fun hintFor(url: String?, stderr: String): String {
+        val s = stderr.lowercase()
+        return when {
+            "repository not found" in s || "does not exist" in s -> REPO_HINT
+            "permission denied" in s && "publickey" in s -> SSH_HINT
+            "permission denied" in s -> PERMISSION_HINT
+            "authentication failed" in s || "could not read username" in s -> HTTPS_HINT
+            "non-fast-forward" in s || "rejected" in s && "fast-forward" in s -> NON_FF_HINT
+            url == null -> GENERIC_AUTH_HINT
+            url.startsWith("git@") || url.startsWith("ssh://") -> SSH_HINT
+            url.startsWith("http://") || url.startsWith("https://") -> HTTPS_HINT
+            else -> GENERIC_AUTH_HINT
+        }
     }
 
     private companion object {
+        const val REPO_HINT = """The remote repository was not found or your account lacks access.
+  - Verify the URL is correct: git remote -v
+  - Check that the repository exists on the host and you can see it.
+  - If the SSH key belongs to a different account than the repo's owner/collaborators,
+    you may be authenticated as a user without access. Confirm with: ssh -T git@github.com
+  - For sandbox testing without a real remote, point origin at a local bare repo:
+        git init --bare ~/tmp/sandbox.git
+        git remote set-url origin ~/tmp/sandbox.git
+"""
+
+        const val PERMISSION_HINT = """The remote rejected the push due to insufficient permissions.
+  - Confirm you have write access to the repository.
+  - Branch protection rules may forbid pushing tags directly; release from a permitted context.
+"""
+
+        const val NON_FF_HINT = """The push was rejected as non-fast-forward.
+  - Pull or rebase before retrying, or fix the tag conflict.
+  - Note: shipyard creates annotated tags; existing tags with the same name will collide.
+"""
+
         const val SSH_HINT = """SSH auth failed. Common fixes:
   - Load your key into ssh-agent: ssh-add ~/.ssh/id_ed25519
   - macOS: ssh-add --apple-use-keychain ~/.ssh/id_ed25519, then add
