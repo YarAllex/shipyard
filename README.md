@@ -1,100 +1,135 @@
 # Shipyard
 
-Gradle plugin: conventional-commits SemVer + Docker image release.
+Gradle plugin for **conventional-commits SemVer** + **Docker image release**.
 
-Forked out of a hand-rolled `dockerRelease` flow. Replaces axion-release for the simple case
-(SemVer from git tags, bumped by conventional-commits) and bundles Docker login/build/push tasks
-that play nicely with `ghcr.io`.
+One `./gradlew ship` does the whole loop:
 
-## Apply
-
-`settings.gradle.kts`:
-
-```kotlin
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        maven {
-            url = uri("https://maven.pkg.github.com/YarAllex/shipyard")
-        }
-    }
-}
 ```
+nextVersion → git tag → docker build → docker push → push tag
+```
+
+No bash scripts, no axion-release setup, no `gradle.properties` ceremony for credentials.
+
+## Quick start
 
 `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    id("dev.yarallex.shipyard") version "0.1.0"
+    id("dev.yarallex.shipyard") version "0.1.1"
 }
 
 shipyard {
-    imageRepo.set("ghcr.io/your-org/your-service")
+    imageRepo = "ghcr.io/your-org/your-service"
 }
 ```
 
-## Configuration
+That is the minimum config for GHCR. Make sure `Dockerfile` exists at the project root.
 
-The `shipyard { ... }` extension has the following properties. Only `imageRepo` is required;
-the rest fall back to sensible defaults.
+Cut a release:
 
-| Property | Type | Default | Description |
-| --- | --- | --- | --- |
-| `imageRepo` | `String` | — *(required)* | Fully-qualified image name without tag, e.g. `ghcr.io/your-org/your-service`. Used by `dockerBuild` / `dockerPush*`. |
-| `initialVersion` | `String` | `"0.1.0"` | SemVer assigned when no matching git tag exists yet. The very first `release` will create `<tagPrefix><initialVersion>` without bumping. |
-| `tagPrefix` | `String` | `"v"` | Prefix in front of the SemVer in git tags. The plugin scans `git describe --tags --match=<tagPrefix>*` and writes new tags as `<tagPrefix><version>`. Set to `""` to use bare SemVer tags like `1.2.3`. |
-| `gitRemote` | `String` | `"origin"` | Remote that `pushTag` pushes the new version tag to. |
-| `registryHost` | `String` | `"ghcr.io"` | Host argument for `docker login`. Change to `docker.io`, `registry.gitlab.com`, etc. for non-GHCR registries. |
-| `registryUserEnv` | `String` | `"GHCR_USER"` | Name of the environment variable the `dockerLogin` task reads to get the registry username. |
-| `registryTokenEnv` | `String` | `"GHCR_TOKEN"` | Name of the environment variable the `dockerLogin` task reads (via stdin) to get the registry password / token. |
-| `dockerBin` | `String` | `"docker"` | Path or name of the docker CLI. Override if `docker` is not on `PATH` (e.g. `"/usr/local/bin/docker"`). |
-| `gitBin` | `String` | `"git"` | Path or name of the git CLI. Same use case as `dockerBin`. |
-| `buildTaskName` | `String` | *(unset)* | Optional name of a task that must run before `dockerBuild`. Set to e.g. `"build"` so the JAR/binary is produced and packaged before the docker image is built. Leave unset for projects where `dockerBuild` is self-sufficient. |
-| `requireCleanWorkingTree` | `Boolean` | `true` | When `true`, the `release` task aborts if `git status --porcelain` reports any change. Set to `false` only for sandboxes where dirty trees are expected. |
-
-Example with overrides for a non-GHCR registry and a Spring Boot project:
-
-```kotlin
-shipyard {
-    imageRepo.set("registry.gitlab.com/acme/api")
-    registryHost.set("registry.gitlab.com")
-    registryUserEnv.set("GITLAB_USER")
-    registryTokenEnv.set("GITLAB_TOKEN")
-    buildTaskName.set("bootJar")
-    initialVersion.set("1.0.0")
-    tagPrefix.set("release-")
-}
+```bash
+export GHCR_USER=your-user
+export GHCR_TOKEN=ghp_xxx        # PAT with write:packages scope
+./gradlew ship
 ```
+
+## How versions are decided
+
+The plugin parses commits between the last `v*` tag and `HEAD`:
+
+| Commit type | Bump |
+|---|---|
+| `BREAKING CHANGE:` footer or `<type>!:` header | MAJOR |
+| `feat:` / `feat(scope):` | MINOR |
+| `fix:` / `fix(scope):` | PATCH |
+| anything else | none — `ship` is a no-op |
+
+A whole window between two tags collapses into **one** bump — the highest tier wins. Two `feat:` commits do not produce two minor versions; they produce one.
+
+If no matching tag exists yet, `initialVersion` (default `0.1.0`) is used and the first `ship` tags it as-is without bumping.
 
 ## Tasks
 
-| Task | Description |
-| --- | --- |
-| `currentVersion` | Print SemVer derived from the latest `v*` git tag. |
-| `nextVersion` | Print the next SemVer based on conventional-commits since the last tag. |
+| Task | What it does |
+|---|---|
+| `currentVersion` | Print SemVer from the latest matching git tag. |
+| `nextVersion` | Print the next SemVer based on commits since the last tag. |
 | `tagVersion` | Create the next-version git tag locally (no push, no build). |
-| `pushTag` | Push the local version tag to the configured remote. |
-| `dockerLogin` | Login to the configured registry using env-var credentials. |
-| `dockerBuild` | `docker build -t repo:<version> -t repo:latest .` |
-| `dockerPushVersion` | Push `repo:<version>` to the registry. |
-| `dockerPushLatest` | Push `repo:latest` to the registry. |
-| `dockerPush` | Aggregate of `dockerPushVersion` + `dockerPushLatest`. |
-| `release` | Full pipeline: `tagVersion` -> `dockerPush` -> `pushTag`. |
+| `pushTag` | Push the local version tag to `gitRemote`. |
+| `dockerLogin` | Login to `registryHost` using env-var credentials. |
+| `dockerBuild` | `docker build -t imageRepo:<version> -t imageRepo:latest .` |
+| `dockerPushVersion` | Push `imageRepo:<version>`. |
+| `dockerPushLatest` | Push `imageRepo:latest`. |
+| `dockerPush` | `dockerPushVersion` + `dockerPushLatest`. |
+| `ship` | Full pipeline: `tagVersion` → `dockerPush` → `pushTag`. |
 
-## Required env vars
+`./gradlew tasks --group=shipyard` lists them in your project.
 
-By default the `dockerLogin` task reads `GHCR_USER` and `GHCR_TOKEN` from the environment.
-Both names are configurable via `registryUserEnv` / `registryTokenEnv`.
+## Configuration
 
-## Versioning rules
+All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 
-- Latest tag matching `<tagPrefix>*` is parsed as SemVer.
-- `git log <previousTag>..HEAD` is scanned:
-  - `BREAKING CHANGE:` footer or `<type>!:` header -> major
-  - `feat[(scope)]:` -> minor
-  - `fix[(scope)]:` -> patch
-  - otherwise no bump (release task is a no-op).
-- No previous tag -> `initialVersion` is used as-is.
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `imageRepo` | `String` | — *(required)* | Fully-qualified image name without tag, e.g. `ghcr.io/acme/api`. |
+| `initialVersion` | `String` | `"0.1.0"` | Used when no matching tag exists yet. |
+| `tagPrefix` | `String` | `"v"` | Prefix for SemVer git tags. Set to `""` for bare `1.2.3` tags. |
+| `gitRemote` | `String` | `"origin"` | Remote `pushTag` pushes to. |
+| `registryHost` | `String` | `"ghcr.io"` | Argument for `docker login`. Change for Docker Hub, GitLab, etc. |
+| `registryUserEnv` | `String` | `"GHCR_USER"` | Env var name the plugin reads for the registry username. |
+| `registryTokenEnv` | `String` | `"GHCR_TOKEN"` | Env var name for the registry token / password (read via stdin). |
+| `dockerBin` | `String` | `"docker"` | Path or name of the docker CLI. |
+| `gitBin` | `String` | `"git"` | Path or name of the git CLI. |
+| `buildTaskName` | `String` | *(unset)* | Optional task name that must run before `dockerBuild` (e.g. `"bootJar"`, `"build"`). Leave unset for projects whose `Dockerfile` does the build itself. |
+| `requireCleanWorkingTree` | `Boolean` | `true` | `ship` aborts on a dirty working tree. Set `false` only for sandboxes. |
+
+## Examples
+
+### Docker Hub
+
+```kotlin
+shipyard {
+    imageRepo = "yarallex/api"
+    registryHost = "docker.io"
+    registryUserEnv = "DOCKERHUB_USER"
+    registryTokenEnv = "DOCKERHUB_TOKEN"
+}
+```
+
+```bash
+export DOCKERHUB_USER=yarallex
+export DOCKERHUB_TOKEN=dckr_pat_xxx
+./gradlew ship
+```
+
+### GitLab Container Registry + Spring Boot
+
+```kotlin
+shipyard {
+    imageRepo = "registry.gitlab.com/acme/api"
+    registryHost = "registry.gitlab.com"
+    registryUserEnv = "GITLAB_USER"
+    registryTokenEnv = "GITLAB_TOKEN"
+    buildTaskName = "bootJar"
+    initialVersion = "1.0.0"
+    tagPrefix = "release-"
+}
+```
+
+### Inspect without releasing
+
+```bash
+./gradlew currentVersion        # what tag we're on
+./gradlew nextVersion           # what release would produce now
+./gradlew tagVersion            # create local tag, do not push, do not build
+```
+
+## CI tips
+
+- Run `./gradlew ship` on a protected branch only.
+- Pass credentials as masked env vars, never as `-P` properties (those leak into Gradle build scans).
+- For shallow CI clones, fetch enough history to see the last tag: `git fetch --tags --depth=100`.
 
 ## License
 
