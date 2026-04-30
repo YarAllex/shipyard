@@ -29,9 +29,19 @@ class GitOps(private val execOps: ExecOperations, private val workingDir: File, 
         run(listOf(gitBin, "tag", "-a", tag, "-m", message))
     }
 
-    fun pushTag(remote: String, tag: String) {
-        run(listOf(gitBin, "push", remote, tag))
+    fun pushTag(remote: String, tag: String): GitPushResult {
+        val stderr = ByteArrayOutputStream()
+        val result = execOps.exec { spec ->
+            spec.workingDir(this.workingDir)
+            spec.commandLine(listOf(gitBin, "push", remote, tag))
+            spec.errorOutput = stderr
+            spec.isIgnoreExitValue = true
+        }
+        return GitPushResult(result.exitValue, stderr.toString(Charsets.UTF_8).trim())
     }
+
+    fun remoteUrl(remote: String): String? =
+        capture(listOf(gitBin, "remote", "get-url", remote))?.takeIf { it.isNotBlank() }
 
     fun isDirty(): Boolean {
         val out = capture(listOf(gitBin, "status", "--porcelain")).orEmpty()
