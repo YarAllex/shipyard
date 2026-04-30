@@ -22,6 +22,9 @@ abstract class DockerLoginTask : DefaultTask() {
     abstract val dockerBin: Property<String>
 
     @get:Input
+    abstract val imageRepo: Property<String>
+
+    @get:Input
     abstract val registryHost: Property<String>
 
     @get:Input
@@ -51,13 +54,14 @@ abstract class DockerLoginTask : DefaultTask() {
             ?: throw GradleException("'$userVar' is not set in the environment or .env file.")
         val token = resolve(tokenVar, fileVars)
             ?: throw GradleException("'$tokenVar' is not set in the environment or .env file.")
+        val host = ImageRef.effectiveHost(imageRepo.getOrElse(""), registryHost.get())
 
-        log.arrow("Logging in to ${registryHost.get()} as $user")
+        log.arrow("Logging in to $host as $user")
         execOps.exec { spec ->
-            spec.commandLine(dockerBin.get(), "login", registryHost.get(), "-u", user, "--password-stdin")
+            spec.commandLine(dockerBin.get(), "login", host, "-u", user, "--password-stdin")
             spec.standardInput = token.byteInputStream()
         }
-        log.ok("Logged in: ${registryHost.get()} ($user)")
+        log.ok("Logged in: $host ($user)")
     }
 
     private fun resolve(name: String, fileVars: Map<String, String>): String? = System.getenv(name) ?: fileVars[name]

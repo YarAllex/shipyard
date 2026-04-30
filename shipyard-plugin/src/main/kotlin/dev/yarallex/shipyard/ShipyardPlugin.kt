@@ -69,6 +69,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.group = group
             it.description = "Login to the configured Docker registry."
             it.dockerBin.set(ext.dockerBin)
+            it.imageRepo.set(ext.imageRepo)
             it.registryHost.set(ext.registryHost)
             it.registryUserEnv.set(ext.registryUserEnv)
             it.registryTokenEnv.set(ext.registryTokenEnv)
