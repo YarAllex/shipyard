@@ -60,6 +60,5 @@ abstract class DockerLoginTask : DefaultTask() {
         log.ok("Logged in: ${registryHost.get()} ($user)")
     }
 
-    private fun resolve(name: String, fileVars: Map<String, String>): String? =
-        System.getenv(name) ?: fileVars[name]
+    private fun resolve(name: String, fileVars: Map<String, String>): String? = System.getenv(name) ?: fileVars[name]
 }

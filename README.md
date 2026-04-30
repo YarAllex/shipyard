@@ -10,6 +10,35 @@ nextVersion → git tag → docker build → docker push → push tag
 
 No bash scripts, no axion-release setup, no `gradle.properties` ceremony for credentials.
 
+## Prerequisites
+
+The plugin shells out to `git` and `docker`. It assumes the host environment is already set up:
+
+- **`docker` CLI** on `PATH`, daemon running, able to build the project's `Dockerfile`.
+- **`git` CLI** on `PATH`, repository has at least one commit, and the configured remote is **authenticated**:
+  - **SSH remote** (`git@github.com:...`) — your key must be loaded into `ssh-agent`. The plugin runs `git push` non-interactively and cannot prompt for a passphrase.
+    ```bash
+    # macOS, persistent
+    ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+    # ~/.ssh/config:
+    #   Host github.com
+    #     AddKeysToAgent yes
+    #     UseKeychain yes
+    ```
+    ```bash
+    # Linux, per-shell
+    eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519
+    ```
+  - **HTTPS remote** — configure a credential helper or use a PAT:
+    ```bash
+    git config --global credential.helper osxkeychain   # macOS
+    git config --global credential.helper store         # Linux
+    git config --global credential.helper manager       # Windows
+    ```
+- **Registry credentials** for `dockerLogin`. Either set them in the process environment or in a `.env` file at the project root (see [Credentials](#credentials)).
+
+In CI all of the above is normally handled by the standard checkout / login actions; nothing extra is required from this plugin.
+
 ## Quick start
 
 `build.gradle.kts`:
@@ -142,11 +171,52 @@ shipyard {
 ./gradlew tagVersion            # create local tag, do not push, do not build
 ```
 
+### Skip the git push
+
+Use Gradle's standard `-x` to drop a stage. Useful for testing the docker pipeline without touching the remote:
+
+```bash
+./gradlew ship -x pushTag       # tag locally + build + push image, do not push tag
+```
+
 ## CI tips
 
 - Run `./gradlew ship` on a protected branch only.
 - Pass credentials as masked env vars, never as `-P` properties (those leak into Gradle build scans).
 - For shallow CI clones, fetch enough history to see the last tag: `git fetch --tags --depth=100`.
+
+### GitHub Actions
+
+`actions/checkout@v4` configures `git` push credentials via `GITHUB_TOKEN` automatically. Wire registry creds and run `ship`:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0          # need full history for tag detection
+
+- uses: actions/setup-java@v4
+  with:
+    distribution: temurin
+    java-version: 21
+
+- name: Release
+  env:
+    GHCR_USER: ${{ github.actor }}
+    GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: ./gradlew ship
+```
+
+For Docker Hub or another registry, set `registryHost` / `registryUserEnv` / `registryTokenEnv` in `shipyard { }` and pass the matching secrets.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `git push origin v… failed. SSH auth failed.` | Key not loaded into `ssh-agent`, or no SSH key on the host. See [Prerequisites](#prerequisites). |
+| `git push … HTTPS auth failed.` | Credential helper not configured, or PAT missing/expired. |
+| `denied: requested access to the resource is denied` from `docker push` | The image was tagged for a different registry than `dockerLogin` authenticated to. Make sure `imageRepo` and `registryHost` agree (or rely on auto-prefixing). |
+| `'GHCR_TOKEN' is not set in the environment or .env file.` | Neither the env var nor `.env` provided the credential. Export it or add it to `.env`. |
+| `nextVersion` keeps printing the same value after multiple commits | Expected: the bump for the whole window between two tags is collapsed into one. Run `tagVersion` (or `ship`) to close the window. |
 
 ## License
 

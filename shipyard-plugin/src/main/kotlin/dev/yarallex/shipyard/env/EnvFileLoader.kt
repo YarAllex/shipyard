@@ -25,10 +25,9 @@ object EnvFileLoader {
         return key to value
     }
 
-    private fun isValidKey(key: String): Boolean =
-        key.isNotEmpty() &&
-            !key[0].isDigit() &&
-            key.all { it.isLetterOrDigit() || it == '_' }
+    private fun isValidKey(key: String): Boolean = key.isNotEmpty() &&
+        !key[0].isDigit() &&
+        key.all { it.isLetterOrDigit() || it == '_' }
 
     private fun unquote(value: String): String {
         if (value.length >= 2) {

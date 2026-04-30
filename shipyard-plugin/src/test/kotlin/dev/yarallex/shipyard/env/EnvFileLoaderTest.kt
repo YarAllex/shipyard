@@ -101,6 +101,5 @@ class EnvFileLoaderTest {
         assertEquals(mapOf("FOO" to "second"), EnvFileLoader.load(file))
     }
 
-    private fun write(dir: Path, content: String): File =
-        dir.resolve(".env").toFile().also { it.writeText(content) }
+    private fun write(dir: Path, content: String): File = dir.resolve(".env").toFile().also { it.writeText(content) }
 }
