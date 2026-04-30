@@ -1,5 +1,6 @@
 package dev.yarallex.shipyard
 
+import dev.yarallex.shipyard.docker.ImageRef
 import dev.yarallex.shipyard.git.GitOps
 import dev.yarallex.shipyard.log.ShipyardLog
 import org.gradle.api.DefaultTask
@@ -16,6 +17,9 @@ abstract class ReleaseSummaryTask : DefaultTask() {
 
     @get:Input
     abstract val imageRepo: Property<String>
+
+    @get:Input
+    abstract val registryHost: Property<String>
 
     @get:Input
     abstract val tagPrefix: Property<String>
@@ -40,12 +44,13 @@ abstract class ReleaseSummaryTask : DefaultTask() {
         val log = ShipyardLog(styledOutputFactory)
         val repo = imageRepo.orNull
             ?: throw GradleException("shipyard.imageRepo is not configured.")
+        val qualified = ImageRef.qualify(repo, registryHost.getOrElse(""))
         val git = GitOps(execOps, layout.projectDirectory.asFile, gitBin.get())
         val tag = git.latestVersionTag(tagPrefix.get())
             ?: throw GradleException("No release tag found after the release pipeline.")
         val version = tag.removePrefix(tagPrefix.get())
-        val versionedRef = "$repo:$version"
-        val latestRef = "$repo:latest"
+        val versionedRef = "$qualified:$version"
+        val latestRef = "$qualified:latest"
 
         log.line()
         log.divider()
