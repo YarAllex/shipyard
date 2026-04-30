@@ -1,10 +1,16 @@
 package dev.yarallex.shipyard.docker
 
+import dev.yarallex.shipyard.env.EnvFileLoader
 import dev.yarallex.shipyard.log.ShipyardLog
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.logging.text.StyledTextOutputFactory
 import org.gradle.process.ExecOperations
@@ -24,6 +30,11 @@ abstract class DockerLoginTask : DefaultTask() {
     @get:Input
     abstract val registryTokenEnv: Property<String>
 
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val envFile: RegularFileProperty
+
     @get:Inject
     abstract val execOps: ExecOperations
 
@@ -35,10 +46,11 @@ abstract class DockerLoginTask : DefaultTask() {
         val log = ShipyardLog(styledOutputFactory)
         val userVar = registryUserEnv.get()
         val tokenVar = registryTokenEnv.get()
-        val user = System.getenv(userVar)
-            ?: throw GradleException("Environment variable '$userVar' is not set.")
-        val token = System.getenv(tokenVar)
-            ?: throw GradleException("Environment variable '$tokenVar' is not set.")
+        val fileVars = EnvFileLoader.load(envFile.orNull?.asFile)
+        val user = resolve(userVar, fileVars)
+            ?: throw GradleException("'$userVar' is not set in the environment or .env file.")
+        val token = resolve(tokenVar, fileVars)
+            ?: throw GradleException("'$tokenVar' is not set in the environment or .env file.")
 
         log.arrow("Logging in to ${registryHost.get()} as $user")
         execOps.exec { spec ->
@@ -47,4 +59,7 @@ abstract class DockerLoginTask : DefaultTask() {
         }
         log.ok("Logged in: ${registryHost.get()} ($user)")
     }
+
+    private fun resolve(name: String, fileVars: Map<String, String>): String? =
+        System.getenv(name) ?: fileVars[name]
 }

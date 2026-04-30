@@ -1,5 +1,6 @@
 package dev.yarallex.shipyard
 
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 
 abstract class ShipyardExtension {
@@ -25,4 +26,6 @@ abstract class ShipyardExtension {
     abstract val buildTaskName: Property<String>
 
     abstract val requireCleanWorkingTree: Property<Boolean>
+
+    abstract val envFile: RegularFileProperty
 }

@@ -23,6 +23,7 @@ class ShipyardPlugin : Plugin<Project> {
             dockerBin.convention("docker")
             gitBin.convention("git")
             requireCleanWorkingTree.convention(true)
+            envFile.convention(project.layout.projectDirectory.file(".env"))
         }
 
         val group = "shipyard"
@@ -71,6 +72,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.registryHost.set(ext.registryHost)
             it.registryUserEnv.set(ext.registryUserEnv)
             it.registryTokenEnv.set(ext.registryTokenEnv)
+            it.envFile.set(ext.envFile)
         }
 
         val dockerBuild = project.tasks.register(
