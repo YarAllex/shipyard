@@ -20,6 +20,9 @@ abstract class DockerBuildTask : DefaultTask() {
     abstract val imageRepo: Property<String>
 
     @get:Input
+    abstract val registryHost: Property<String>
+
+    @get:Input
     abstract val tagPrefix: Property<String>
 
     @get:Input
@@ -45,10 +48,11 @@ abstract class DockerBuildTask : DefaultTask() {
         val log = ShipyardLog(styledOutputFactory)
         val repo = imageRepo.orNull
             ?: throw GradleException("shipyard.imageRepo is not configured.")
+        val qualified = ImageRef.qualify(repo, registryHost.getOrElse(""))
         val workDir = layout.projectDirectory.asFile
         val version = resolveVersion(workDir)
-        val versionedRef = "$repo:$version"
-        val latestRef = "$repo:latest"
+        val versionedRef = "$qualified:$version"
+        val latestRef = "$qualified:latest"
 
         log.arrow("Building image $versionedRef")
         execOps.exec { spec ->

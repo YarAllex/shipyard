@@ -84,6 +84,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.dockerBin.set(ext.dockerBin)
             it.gitBin.set(ext.gitBin)
             it.imageRepo.set(ext.imageRepo)
+            it.registryHost.set(ext.registryHost)
             it.tagPrefix.set(ext.tagPrefix)
             it.initialVersion.set(ext.initialVersion)
             it.mustRunAfter(tagVersion)
@@ -105,6 +106,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.dockerBin.set(ext.dockerBin)
             it.gitBin.set(ext.gitBin)
             it.imageRepo.set(ext.imageRepo)
+            it.registryHost.set(ext.registryHost)
             it.tagPrefix.set(ext.tagPrefix)
             it.initialVersion.set(ext.initialVersion)
             it.tagSelector.set(DockerPushTask.TagSelector.VERSION)
@@ -120,6 +122,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.dockerBin.set(ext.dockerBin)
             it.gitBin.set(ext.gitBin)
             it.imageRepo.set(ext.imageRepo)
+            it.registryHost.set(ext.registryHost)
             it.tagPrefix.set(ext.tagPrefix)
             it.initialVersion.set(ext.initialVersion)
             it.tagSelector.set(DockerPushTask.TagSelector.LATEST)
@@ -149,6 +152,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.group = group
             it.description = "Full release: tag the next version, build & push the image, then push the tag."
             it.imageRepo.set(ext.imageRepo)
+            it.registryHost.set(ext.registryHost)
             it.tagPrefix.set(ext.tagPrefix)
             it.gitBin.set(ext.gitBin)
             it.gitRemote.set(ext.gitRemote)

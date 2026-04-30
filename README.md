@@ -20,9 +20,11 @@ plugins {
 }
 
 shipyard {
-    imageRepo = "ghcr.io/your-org/your-service"
+    imageRepo = "your-org/your-service"
 }
 ```
+
+`registryHost` defaults to `ghcr.io`. The plugin auto-prefixes `imageRepo` with the host when it lacks one, so the example above pushes to `ghcr.io/your-org/your-service`. Pass an already-qualified repo (`docker.io/...`, `registry.gitlab.com/...`) to override.
 
 That is the minimum config for GHCR. Make sure `Dockerfile` exists at the project root.
 
@@ -72,7 +74,7 @@ All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 
 | Property | Type | Default | Description |
 |---|---|---|---|
-| `imageRepo` | `String` | — *(required)* | Fully-qualified image name without tag, e.g. `ghcr.io/acme/api`. |
+| `imageRepo` | `String` | — *(required)* | Image name without tag, e.g. `acme/api` or `ghcr.io/acme/api`. If the first segment is not a host (no `.`, `:`, and not `localhost`), `registryHost` is prepended automatically. |
 | `initialVersion` | `String` | `"0.1.0"` | Used when no matching tag exists yet. |
 | `tagPrefix` | `String` | `"v"` | Prefix for SemVer git tags. Set to `""` for bare `1.2.3` tags. |
 | `gitRemote` | `String` | `"origin"` | Remote `pushTag` pushes to. |
@@ -105,7 +107,7 @@ Format: bare `KEY=value` lines, optional `export ` prefix, `#` comments, single 
 
 ```kotlin
 shipyard {
-    imageRepo = "yarallex/api"
+    imageRepo = "docker.io/yarallex/api"
     registryHost = "docker.io"
     registryUserEnv = "DOCKERHUB_USER"
     registryTokenEnv = "DOCKERHUB_TOKEN"
@@ -122,7 +124,7 @@ export DOCKERHUB_TOKEN=dckr_pat_xxx
 
 ```kotlin
 shipyard {
-    imageRepo = "registry.gitlab.com/acme/api"
+    imageRepo = "acme/api"
     registryHost = "registry.gitlab.com"
     registryUserEnv = "GITLAB_USER"
     registryTokenEnv = "GITLAB_TOKEN"

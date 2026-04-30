@@ -22,6 +22,9 @@ abstract class DockerPushTask : DefaultTask() {
     abstract val imageRepo: Property<String>
 
     @get:Input
+    abstract val registryHost: Property<String>
+
+    @get:Input
     abstract val tagPrefix: Property<String>
 
     @get:Input
@@ -50,9 +53,10 @@ abstract class DockerPushTask : DefaultTask() {
         val log = ShipyardLog(styledOutputFactory)
         val repo = imageRepo.orNull
             ?: throw GradleException("shipyard.imageRepo is not configured.")
+        val qualified = ImageRef.qualify(repo, registryHost.getOrElse(""))
         val ref = when (tagSelector.get()) {
-            TagSelector.LATEST -> "$repo:latest"
-            TagSelector.VERSION -> "$repo:${resolveVersion()}"
+            TagSelector.LATEST -> "$qualified:latest"
+            TagSelector.VERSION -> "$qualified:${resolveVersion()}"
         }
         log.arrow("Pushing $ref")
         execOps.exec { spec ->
