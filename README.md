@@ -83,6 +83,21 @@ All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 | `gitBin` | `String` | `"git"` | Path or name of the git CLI. |
 | `buildTaskName` | `String` | *(unset)* | Optional task name that must run before `dockerBuild` (e.g. `"bootJar"`, `"build"`). Leave unset for projects whose `Dockerfile` does the build itself. |
 | `requireCleanWorkingTree` | `Boolean` | `true` | `ship` aborts on a dirty working tree. Set `false` only for sandboxes. |
+| `envFile` | `RegularFile` | `<project>/.env` | File scanned for `registryUserEnv` / `registryTokenEnv` when they aren't set in the real environment. Real env vars always win. Missing file is silently ignored. |
+
+## Credentials
+
+`dockerLogin` reads `registryUserEnv` and `registryTokenEnv` first from the process environment, then falls back to `envFile` (default `.env` at the project root).
+
+```dotenv
+# .env
+GHCR_USER=your-user
+GHCR_TOKEN=ghp_xxx
+```
+
+Format: bare `KEY=value` lines, optional `export ` prefix, `#` comments, single or double quotes around values. No interpolation.
+
+⚠️ **Add `.env` to `.gitignore`.** Never commit it. In CI use real env vars (GitHub Actions secrets, etc.) — they take precedence over the file.
 
 ## Examples
 
