@@ -143,7 +143,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.mustRunAfter(tagVersion, dockerPush)
         }
 
-        project.tasks.register("release", ReleaseSummaryTask::class.java) {
+        project.tasks.register("ship", ReleaseSummaryTask::class.java) {
             it.group = group
             it.description = "Full release: tag the next version, build & push the image, then push the tag."
             it.imageRepo.set(ext.imageRepo)
