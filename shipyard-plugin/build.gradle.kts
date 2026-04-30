@@ -1,7 +1,7 @@
 plugins {
     `java-gradle-plugin`
-    `maven-publish`
     kotlin("jvm")
+    id("com.gradle.plugin-publish")
     id("com.diffplug.spotless")
     id("org.jetbrains.kotlinx.kover")
 }
@@ -101,16 +101,6 @@ gradlePlugin {
 
 publishing {
     repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/YarAllex/shipyard")
-            credentials {
-                username = System.getenv("GHCR_USER")
-                    ?: providers.gradleProperty("gpr.user").orNull
-                password = System.getenv("GHCR_TOKEN")
-                    ?: providers.gradleProperty("gpr.token").orNull
-            }
-        }
         mavenLocal()
     }
     publications.withType<MavenPublication>().configureEach {
