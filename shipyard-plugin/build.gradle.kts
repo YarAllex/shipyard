@@ -70,6 +70,7 @@ kover {
                     "dev.yarallex.shipyard.version.PrintCurrentVersionTask",
                     "dev.yarallex.shipyard.version.NextVersionTask",
                     "dev.yarallex.shipyard.version.VersionResolver*",
+                    "dev.yarallex.shipyard.version.VersionValueSource*",
                 )
             }
         }

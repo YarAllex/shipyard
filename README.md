@@ -97,6 +97,27 @@ If no matching tag exists yet, `initialVersion` (default `0.1.0`) is used and th
 
 `./gradlew tasks --group=shipyard` lists them in your project.
 
+## Sync `project.version` with the release tag
+
+The plugin exposes lazy providers on the extension:
+
+| Property | Type | Description |
+|---|---|---|
+| `shipyard.currentVersion` | `Provider<String>` | SemVer of the latest matching git tag (or `initialVersion` if none). |
+| `shipyard.nextVersion` | `Provider<String>` | What `ship` would produce now: `currentVersion` + computed bump. |
+
+Use either one to keep your JAR/artifact name aligned with the docker tag:
+
+```kotlin
+shipyard {
+    imageRepo = "ghcr.io/acme/api"
+}
+
+version = shipyard.nextVersion.get()
+```
+
+Now `bootJar` produces `api-1.2.3.jar` and the image is tagged `:1.2.3` — single source of truth (git).
+
 ## Configuration
 
 All fields on the `shipyard { }` extension. Only `imageRepo` is required.
@@ -184,18 +205,78 @@ export GITLAB_TOKEN=glpat_xxx              # personal/deploy token, scope: write
 ./gradlew ship
 ```
 
-### Spring Boot project (any registry)
+### Spring Boot project (full setup)
 
-Add `buildTaskName` so the fat JAR is built before `dockerBuild`:
+Recommended pattern: host builds the JAR via `bootJar`, the Dockerfile only copies the artifact and uses Spring's [layered JAR](https://docs.spring.io/spring-boot/reference/packaging/efficient.html) for cache-friendly pushes.
+
+`build.gradle.kts`:
 
 ```kotlin
+plugins {
+    kotlin("jvm") version "2.0.21"
+    id("org.springframework.boot") version "3.5.12"
+    id("io.spring.dependency-management") version "1.1.7"
+    id("dev.yarallex.shipyard") version "0.1.1"
+}
+
+group = "com.acme"
+
 shipyard {
     imageRepo = "ghcr.io/acme/api"
-    buildTaskName = "bootJar"
-    initialVersion = "1.0.0"
-    tagPrefix = "release-"
+    buildTaskName = "bootJar"          // dockerBuild depends on bootJar
+}
+
+version = shipyard.nextVersion.get()    // JAR name matches release tag
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    // ...
 }
 ```
+
+`Dockerfile`:
+
+```dockerfile
+FROM eclipse-temurin:21-jre-alpine AS extract
+WORKDIR /build
+COPY build/libs/*.jar app.jar
+RUN java -Djarmode=layertools -jar app.jar extract --destination extracted
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=extract /build/extracted/dependencies/ ./
+COPY --from=extract /build/extracted/spring-boot-loader/ ./
+COPY --from=extract /build/extracted/snapshot-dependencies/ ./
+COPY --from=extract /build/extracted/application/ ./
+ENTRYPOINT ["java","org.springframework.boot.loader.launch.JarLauncher"]
+```
+
+`.dockerignore` (critical — without it `docker build` ships the entire repo as build context):
+
+```
+.git
+.gradle
+build/tmp
+build/reports
+build/test-results
+src
+*.md
+```
+
+Release flow:
+
+```bash
+git commit -am "feat: add /healthz endpoint"
+./gradlew ship
+# → next version computed, e.g. 1.4.0
+# → bootJar produces api-1.4.0.jar
+# → docker build extracts layered JAR
+# → image tagged ghcr.io/acme/api:1.4.0 + :latest
+# → pushed to GHCR
+# → git tag v1.4.0 pushed to origin
+```
+
+Full source of truth: the git tag. JAR name, image tag, project version — all derived from it via `shipyard.nextVersion`.
 
 ### Inspect without releasing
 
