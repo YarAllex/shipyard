@@ -1,10 +1,13 @@
 package dev.yarallex.shipyard.git
 
+import dev.yarallex.shipyard.exec.BinaryResolver
 import org.gradle.process.ExecOperations
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class GitOps(private val execOps: ExecOperations, private val workingDir: File, private val gitBin: String = "git") {
+class GitOps(private val execOps: ExecOperations, private val workingDir: File, gitBin: String = "git") {
+
+    private val gitBin: String = BinaryResolver.resolve(gitBin)
 
     fun latestVersionTag(prefix: String): String? {
         val out = capture(listOf(gitBin, "describe", "--tags", "--abbrev=0", "--match=$prefix*"))

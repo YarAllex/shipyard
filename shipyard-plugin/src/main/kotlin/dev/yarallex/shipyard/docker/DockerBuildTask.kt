@@ -1,5 +1,6 @@
 package dev.yarallex.shipyard.docker
 
+import dev.yarallex.shipyard.exec.BinaryResolver
 import dev.yarallex.shipyard.git.GitOps
 import dev.yarallex.shipyard.log.ShipyardLog
 import dev.yarallex.shipyard.version.SemVer
@@ -54,11 +55,12 @@ abstract class DockerBuildTask : DefaultTask() {
         val versionedRef = "$qualified:$version"
         val latestRef = "$qualified:latest"
 
+        val docker = BinaryResolver.resolve(dockerBin.get())
         log.arrow("Building image $versionedRef")
         execOps.exec { spec ->
             spec.workingDir(workDir)
             spec.commandLine(
-                dockerBin.get(),
+                docker,
                 "build",
                 "-t",
                 versionedRef,
@@ -66,6 +68,7 @@ abstract class DockerBuildTask : DefaultTask() {
                 latestRef,
                 ".",
             )
+            spec.environment("PATH", BinaryResolver.augmentedPath())
         }
         log.ok("Built: $versionedRef")
         log.ok("Built: $latestRef")

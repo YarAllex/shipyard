@@ -1,5 +1,6 @@
 package dev.yarallex.shipyard.docker
 
+import dev.yarallex.shipyard.exec.BinaryResolver
 import dev.yarallex.shipyard.git.GitOps
 import dev.yarallex.shipyard.log.ShipyardLog
 import dev.yarallex.shipyard.version.SemVer
@@ -58,9 +59,11 @@ abstract class DockerPushTask : DefaultTask() {
             TagSelector.LATEST -> "$qualified:latest"
             TagSelector.VERSION -> "$qualified:${resolveVersion()}"
         }
+        val docker = BinaryResolver.resolve(dockerBin.get())
         log.arrow("Pushing $ref")
         execOps.exec { spec ->
-            spec.commandLine(dockerBin.get(), "push", ref)
+            spec.commandLine(docker, "push", ref)
+            spec.environment("PATH", BinaryResolver.augmentedPath())
         }
         log.ok("Pushed: $ref")
     }

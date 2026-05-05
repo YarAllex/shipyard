@@ -1,6 +1,7 @@
 package dev.yarallex.shipyard.docker
 
 import dev.yarallex.shipyard.env.EnvFileLoader
+import dev.yarallex.shipyard.exec.BinaryResolver
 import dev.yarallex.shipyard.log.ShipyardLog
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
@@ -55,10 +56,12 @@ abstract class DockerLoginTask : DefaultTask() {
         val token = resolve(tokenVar, fileVars)
             ?: throw GradleException("'$tokenVar' is not set in the environment or .env file.")
         val host = ImageRef.effectiveHost(imageRepo.getOrElse(""), registryHost.get())
+        val docker = BinaryResolver.resolve(dockerBin.get())
 
         log.arrow("Logging in to $host as $user")
         execOps.exec { spec ->
-            spec.commandLine(dockerBin.get(), "login", host, "-u", user, "--password-stdin")
+            spec.commandLine(docker, "login", host, "-u", user, "--password-stdin")
+            spec.environment("PATH", BinaryResolver.augmentedPath())
             spec.standardInput = token.byteInputStream()
         }
         log.ok("Logged in: $host ($user)")
