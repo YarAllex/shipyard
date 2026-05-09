@@ -67,18 +67,40 @@ export GHCR_TOKEN=ghp_xxx        # PAT with write:packages scope
 
 ## How versions are decided
 
-The plugin parses commits between the last `v*` tag and `HEAD`:
+Shipyard expects [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Format:
 
-| Commit type | Bump |
-|---|---|
-| `BREAKING CHANGE:` footer or `<type>!:` header | MAJOR |
-| `feat:` / `feat(scope):` | MINOR |
-| `fix:` / `fix(scope):` | PATCH |
-| anything else | none — `ship` is a no-op |
+```
+<type>[optional scope][!]: <description>
 
-A whole window between two tags collapses into **one** bump — the highest tier wins. Two `feat:` commits do not produce two minor versions; they produce one.
+[optional body]
 
-If no matching tag exists yet, `initialVersion` (default `0.1.0`) is used and the first `ship` tags it as-is without bumping.
+[optional footer(s)]
+```
+
+The plugin parses commits between the last `v*` tag and `HEAD` and maps them to a SemVer bump:
+
+| Commit | Bump | Example |
+|---|---|---|
+| `<type>!:` header **or** `BREAKING CHANGE:` footer | MAJOR | `feat!: drop /v1 endpoints` |
+| `feat:` / `feat(scope):` | MINOR | `feat(api): add /healthz` |
+| `fix:` / `fix(scope):` | PATCH | `fix: handle null token` |
+| `chore` / `docs` / `style` / `refactor` / `perf` / `test` / `build` / `ci` | none | `chore: bump deps` |
+| anything not matching the spec | none | `ops: tweak workflow` ← non-standard, ignored |
+
+Rules:
+- **Highest tier wins.** A window with one `fix:` and one `feat:` between two tags produces **one MINOR** bump, not two releases.
+- **Non-standard types are no-ops.** `ops:`, `wip:`, free-form messages — `ship` skips them, no version change.
+- **No tag yet** → `initialVersion` (default `0.1.0`) is used; the first `ship` tags it as-is without bumping.
+
+Marking a breaking change:
+
+```
+feat!: rename imageRepo to image
+
+BREAKING CHANGE: the `imageRepo` property has been renamed to `image`.
+```
+
+Either the `!` after the type or the `BREAKING CHANGE:` footer triggers MAJOR — both are valid per spec.
 
 ## Tasks
 
