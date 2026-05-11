@@ -3,6 +3,7 @@ package dev.yarallex.shipyard
 import dev.yarallex.shipyard.version.VersionValueSource
 import org.gradle.api.file.ProjectLayout
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.ProviderFactory
@@ -32,6 +33,8 @@ abstract class ShipyardExtension @Inject constructor(
     abstract val gitBin: Property<String>
 
     abstract val buildTaskName: Property<String>
+
+    abstract val platforms: ListProperty<String>
 
     abstract val requireCleanWorkingTree: Property<Boolean>
 

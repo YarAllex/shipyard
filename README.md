@@ -5,16 +5,16 @@ Gradle plugin for **conventional-commits SemVer** + **Docker image release**.
 One `./gradlew ship` does the whole loop:
 
 ```
-nextVersion → git tag → docker build → docker push → push tag
+nextVersion → git tag → docker buildx build --push → push tag
 ```
 
-No bash scripts, no axion-release setup, no `gradle.properties` ceremony for credentials.
+Multi-arch by default (`linux/amd64,linux/arm64`). No bash scripts, no axion-release setup, no `gradle.properties` ceremony for credentials.
 
 ## Prerequisites
 
 The plugin shells out to `git` and `docker`. It assumes the host environment is already set up:
 
-- **`docker` CLI** on `PATH`, daemon running, able to build the project's `Dockerfile`.
+- **`docker` CLI** on `PATH`, daemon running, and **`docker buildx`** available (bundled with Docker Desktop and recent Docker Engine; required for multi-platform builds via QEMU emulation).
 - **`git` CLI** on `PATH`, repository has at least one commit, and the configured remote is **authenticated**:
   - **SSH remote** (`git@github.com:...`) — your key must be loaded into `ssh-agent`. The plugin runs `git push` non-interactively and cannot prompt for a passphrase.
     ```bash
@@ -45,7 +45,7 @@ In CI all of the above is normally handled by the standard checkout / login acti
 
 ```kotlin
 plugins {
-    id("dev.yarallex.shipyard") version "0.1.1"
+    id("dev.yarallex.shipyard") version "0.3.0"
 }
 
 shipyard {
@@ -54,6 +54,8 @@ shipyard {
 ```
 
 `registryHost` defaults to `ghcr.io`. The plugin auto-prefixes `imageRepo` with the host when it lacks one, so the example above pushes to `ghcr.io/your-org/your-service`. Pass an already-qualified repo (`docker.io/...`, `registry.gitlab.com/...`) and `registryHost` is derived from it — no need to set it twice.
+
+`platforms` defaults to `["linux/amd64", "linux/arm64"]` — `dockerPush` / `ship` produce a multi-arch OCI index. Override with a single value (`platforms = listOf("linux/amd64")`) for single-arch pushes.
 
 That is the minimum config for GHCR. Make sure `Dockerfile` exists at the project root.
 
@@ -111,11 +113,13 @@ Either the `!` after the type or the `BREAKING CHANGE:` footer triggers MAJOR �
 | `tagVersion` | Create the next-version git tag locally (no push, no build). |
 | `pushTag` | Push the local version tag to `gitRemote`. |
 | `dockerLogin` | Login to `registryHost` using env-var credentials. |
-| `dockerBuild` | `docker build -t imageRepo:<version> -t imageRepo:latest .` |
-| `dockerPushVersion` | Push `imageRepo:<version>`. |
-| `dockerPushLatest` | Push `imageRepo:latest`. |
-| `dockerPush` | `dockerPushVersion` + `dockerPushLatest`. |
+| `dockerBuild` | Local-only build: `docker buildx build --load -t imageRepo:<version> -t imageRepo:latest .` Single platform (host's native arch) — `buildx --load` does not accept multiple platforms. For multi-arch use `dockerPush`. |
+| `dockerPush` | Build **and** push for all configured `platforms` in one buildx call: `docker buildx build --platform <csv> --push -t imageRepo:<version> -t imageRepo:latest .` |
+| `dockerPushVersion` | Deprecated alias for `dockerPush`. |
+| `dockerPushLatest` | Deprecated alias for `dockerPush`. |
 | `ship` | Full pipeline: `tagVersion` → `dockerPush` → `pushTag`. |
+
+Multi-arch images must be pushed directly to the registry — buildx cannot `--load` more than one platform into the local daemon. So `dockerPush` is the only task that produces multi-arch output; `dockerBuild` is for local single-arch smoke tests.
 
 `./gradlew tasks --group=shipyard` lists them in your project.
 
@@ -151,6 +155,7 @@ All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 | `tagPrefix` | `String` | `"v"` | Prefix for SemVer git tags. Set to `""` for bare `1.2.3` tags. |
 | `gitRemote` | `String` | `"origin"` | Remote `pushTag` pushes to. |
 | `registryHost` | `String` | `"ghcr.io"` | Fallback host for `docker login` and the auto-prefix. Ignored if `imageRepo` already contains a host segment. |
+| `platforms` | `List<String>` | `["linux/amd64", "linux/arm64"]` | Target platforms for `dockerPush` / `ship`. Each entry is `os/arch` (e.g. `linux/amd64`). Set to a single value for single-arch pushes; an empty list lets buildx pick the builder's default. Building non-host platforms on Docker Desktop uses QEMU emulation, which is functional but slower than native builds. |
 | `registryUserEnv` | `String` | `"GHCR_USER"` | Env var name the plugin reads for the registry username. |
 | `registryTokenEnv` | `String` | `"GHCR_TOKEN"` | Env var name for the registry token / password (read via stdin). |
 | `dockerBin` | `String` | `"docker"` | Path or name of the docker CLI. |
@@ -238,7 +243,7 @@ plugins {
     kotlin("jvm") version "2.0.21"
     id("org.springframework.boot") version "3.5.12"
     id("io.spring.dependency-management") version "1.1.7"
-    id("dev.yarallex.shipyard") version "0.1.1"
+    id("dev.yarallex.shipyard") version "0.3.0"
 }
 
 group = "com.acme"
@@ -292,9 +297,8 @@ git commit -am "feat: add /healthz endpoint"
 ./gradlew ship
 # → next version computed, e.g. 1.4.0
 # → bootJar produces api-1.4.0.jar
-# → docker build extracts layered JAR
-# → image tagged ghcr.io/acme/api:1.4.0 + :latest
-# → pushed to GHCR
+# → buildx builds layered JAR image for linux/amd64 and linux/arm64
+# → multi-arch index tagged ghcr.io/acme/api:1.4.0 + :latest, pushed to GHCR
 # → git tag v1.4.0 pushed to origin
 ```
 
@@ -352,6 +356,8 @@ For Docker Hub or another registry, set `registryHost` / `registryUserEnv` / `re
 | `git push origin v… failed. SSH auth failed.` | Key not loaded into `ssh-agent`, or no SSH key on the host. See [Prerequisites](#prerequisites). |
 | `git push … HTTPS auth failed.` | Credential helper not configured, or PAT missing/expired. |
 | `denied: requested access to the resource is denied` from `docker push` | The image was tagged for a different registry than `dockerLogin` authenticated to. Make sure `imageRepo` and `registryHost` agree (or rely on auto-prefixing). |
+| `no matching manifest for linux/amd64 in the manifest list entries` when pulling on the target host | The image in the registry was pushed without including the target's platform. Confirm `platforms` covers it (e.g. `linux/amd64` for x86 VPS hosts) and re-run `dockerPush`. |
+| `Multi-platform build (…) requires push=true` from `dockerBuild` | `dockerBuild` uses `buildx --load`, which only accepts a single platform. Either configure `platforms` to one entry for local builds or use `dockerPush` to publish the multi-arch image. |
 | `'GHCR_TOKEN' is not set in the environment or .env file.` | Neither the env var nor `.env` provided the credential. Export it or add it to `.env`. |
 | `nextVersion` keeps printing the same value after multiple commits | Expected: the bump for the whole window between two tags is collapsed into one. Run `tagVersion` (or `ship`) to close the window. |
 

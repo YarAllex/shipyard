@@ -2,7 +2,6 @@ package dev.yarallex.shipyard
 
 import dev.yarallex.shipyard.docker.DockerBuildTask
 import dev.yarallex.shipyard.docker.DockerLoginTask
-import dev.yarallex.shipyard.docker.DockerPushTask
 import dev.yarallex.shipyard.git.CreateTagTask
 import dev.yarallex.shipyard.git.PushTagTask
 import dev.yarallex.shipyard.version.NextVersionTask
@@ -22,6 +21,7 @@ class ShipyardPlugin : Plugin<Project> {
             registryTokenEnv.convention("GHCR_TOKEN")
             dockerBin.convention("docker")
             gitBin.convention("git")
+            platforms.convention(listOf("linux/amd64", "linux/arm64"))
             requireCleanWorkingTree.convention(true)
             envFile.convention(project.layout.projectDirectory.file(".env"))
         }
@@ -81,59 +81,54 @@ class ShipyardPlugin : Plugin<Project> {
             DockerBuildTask::class.java,
         ) {
             it.group = group
-            it.description = "Build the Docker image tagged with the current version and 'latest'."
+            it.description = "Build the Docker image locally (single platform, --load)."
             it.dockerBin.set(ext.dockerBin)
             it.gitBin.set(ext.gitBin)
             it.imageRepo.set(ext.imageRepo)
             it.registryHost.set(ext.registryHost)
             it.tagPrefix.set(ext.tagPrefix)
             it.initialVersion.set(ext.initialVersion)
+            it.platforms.set(project.provider { emptyList<String>() })
+            it.push.set(false)
             it.mustRunAfter(tagVersion)
+        }
+
+        val dockerPush = project.tasks.register(
+            "dockerPush",
+            DockerBuildTask::class.java,
+        ) {
+            it.group = group
+            it.description = "Build and push image to the registry for all configured platforms."
+            it.dockerBin.set(ext.dockerBin)
+            it.gitBin.set(ext.gitBin)
+            it.imageRepo.set(ext.imageRepo)
+            it.registryHost.set(ext.registryHost)
+            it.tagPrefix.set(ext.tagPrefix)
+            it.initialVersion.set(ext.initialVersion)
+            it.platforms.set(ext.platforms)
+            it.push.set(true)
+            it.dependsOn(dockerLogin)
+            it.mustRunAfter(tagVersion)
+        }
+
+        project.tasks.register("dockerPushVersion") {
+            it.group = group
+            it.description = "Deprecated alias for dockerPush."
+            it.dependsOn(dockerPush)
+        }
+
+        project.tasks.register("dockerPushLatest") {
+            it.group = group
+            it.description = "Deprecated alias for dockerPush."
+            it.dependsOn(dockerPush)
         }
 
         project.afterEvaluate {
             val name = ext.buildTaskName.orNull
             if (!name.isNullOrBlank()) {
                 dockerBuild.configure { task -> task.dependsOn(name) }
+                dockerPush.configure { task -> task.dependsOn(name) }
             }
-        }
-
-        val dockerPushVersion = project.tasks.register(
-            "dockerPushVersion",
-            DockerPushTask::class.java,
-        ) {
-            it.group = group
-            it.description = "Push the version-tagged image to the registry."
-            it.dockerBin.set(ext.dockerBin)
-            it.gitBin.set(ext.gitBin)
-            it.imageRepo.set(ext.imageRepo)
-            it.registryHost.set(ext.registryHost)
-            it.tagPrefix.set(ext.tagPrefix)
-            it.initialVersion.set(ext.initialVersion)
-            it.tagSelector.set(DockerPushTask.TagSelector.VERSION)
-            it.dependsOn(dockerLogin, dockerBuild)
-        }
-
-        val dockerPushLatest = project.tasks.register(
-            "dockerPushLatest",
-            DockerPushTask::class.java,
-        ) {
-            it.group = group
-            it.description = "Push the 'latest' tag to the registry."
-            it.dockerBin.set(ext.dockerBin)
-            it.gitBin.set(ext.gitBin)
-            it.imageRepo.set(ext.imageRepo)
-            it.registryHost.set(ext.registryHost)
-            it.tagPrefix.set(ext.tagPrefix)
-            it.initialVersion.set(ext.initialVersion)
-            it.tagSelector.set(DockerPushTask.TagSelector.LATEST)
-            it.dependsOn(dockerPushVersion)
-        }
-
-        val dockerPush = project.tasks.register("dockerPush") {
-            it.group = group
-            it.description = "Push both versioned and 'latest' tags to the registry."
-            it.dependsOn(dockerPushVersion, dockerPushLatest)
         }
 
         val pushTag = project.tasks.register(
