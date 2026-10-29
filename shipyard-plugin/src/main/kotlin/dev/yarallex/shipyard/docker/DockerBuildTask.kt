@@ -8,9 +8,11 @@ import dev.yarallex.shipyard.version.VersionResolver
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ProjectLayout
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.logging.text.StyledTextOutputFactory
 import org.gradle.process.ExecOperations
@@ -42,6 +44,9 @@ abstract class DockerBuildTask : DefaultTask() {
     @get:Input
     abstract val push: Property<Boolean>
 
+    @get:Internal
+    abstract val prebuiltArtifact: RegularFileProperty
+
     @get:Inject
     abstract val execOps: ExecOperations
 
@@ -54,17 +59,23 @@ abstract class DockerBuildTask : DefaultTask() {
     @TaskAction
     fun run() {
         val log = ShipyardLog(styledOutputFactory)
+        prebuiltArtifact.orNull?.asFile?.let { artifact ->
+            if (!artifact.isFile) {
+                throw GradleException("shipyard.prebuiltArtifact does not exist: ${artifact.path}")
+            }
+            log.arrow("prebuilt artifact ${artifact.path}, build task skipped")
+        }
         val repo = imageRepo.orNull
             ?: throw GradleException("shipyard.imageRepo is not configured.")
         val qualified = ImageRef.qualify(repo, registryHost.getOrElse(""))
         val workDir = layout.projectDirectory.asFile
-        val version = resolveVersion(workDir)
+        val shouldPush = push.getOrElse(false)
+        val version = if (shouldPush) releasedVersion(workDir, log) ?: return else resolveVersion(workDir)
         val versionedRef = "$qualified:$version"
         val latestRef = "$qualified:latest"
 
         val docker = BinaryResolver.resolve(dockerBin.get())
         val platformList = platforms.getOrElse(emptyList()).filter { it.isNotBlank() }
-        val shouldPush = push.getOrElse(false)
 
         if (!shouldPush && platformList.size > 1) {
             throw GradleException(
@@ -107,6 +118,17 @@ abstract class DockerBuildTask : DefaultTask() {
             log.ok("Built: $versionedRef")
             log.ok("Built: $latestRef")
         }
+    }
+
+    private fun releasedVersion(workDir: java.io.File, log: ShipyardLog): String? {
+        val prefix = tagPrefix.get()
+        val tag = GitOps(execOps, workDir, gitBin.get()).exactVersionTag(prefix)
+        if (tag == null) {
+            log.warn("HEAD is not at a $prefix* tag; nothing to push. Run tagVersion (or ship) on a releasable commit.")
+            return null
+        }
+        return SemVer.parseOrNull(tag.removePrefix(prefix))?.toString()
+            ?: throw GradleException("Tag $tag on HEAD is not a valid SemVer.")
     }
 
     private fun resolveVersion(workDir: java.io.File): String {

@@ -46,8 +46,11 @@ abstract class ReleaseSummaryTask : DefaultTask() {
             ?: throw GradleException("shipyard.imageRepo is not configured.")
         val qualified = ImageRef.qualify(repo, registryHost.getOrElse(""))
         val git = GitOps(execOps, layout.projectDirectory.asFile, gitBin.get())
-        val tag = git.latestVersionTag(tagPrefix.get())
-            ?: throw GradleException("No release tag found after the release pipeline.")
+        val tag = git.exactVersionTag(tagPrefix.get())
+        if (tag == null) {
+            log.warn("No release: HEAD is not at a ${tagPrefix.get()}* tag (no releasable commits).")
+            return
+        }
         val version = tag.removePrefix(tagPrefix.get())
         val versionedRef = "$qualified:$version"
         val latestRef = "$qualified:latest"

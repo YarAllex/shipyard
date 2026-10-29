@@ -34,6 +34,8 @@ abstract class ShipyardExtension @Inject constructor(
 
     abstract val buildTaskName: Property<String>
 
+    abstract val prebuiltArtifact: RegularFileProperty
+
     abstract val platforms: ListProperty<String>
 
     abstract val requireCleanWorkingTree: Property<Boolean>

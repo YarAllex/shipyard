@@ -1,7 +1,6 @@
 package dev.yarallex.shipyard.git
 
 import dev.yarallex.shipyard.log.ShipyardLog
-import dev.yarallex.shipyard.version.VersionResolver
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ProjectLayout
@@ -16,9 +15,6 @@ abstract class PushTagTask : DefaultTask() {
 
     @get:Input
     abstract val tagPrefix: Property<String>
-
-    @get:Input
-    abstract val initialVersion: Property<String>
 
     @get:Input
     abstract val gitBin: Property<String>
@@ -41,14 +37,11 @@ abstract class PushTagTask : DefaultTask() {
         val workDir = layout.projectDirectory.asFile
         val git = GitOps(execOps, workDir, gitBin.get())
         val remote = gitRemote.get()
-        val tag = git.latestVersionTag(tagPrefix.get())
-            ?: VersionResolver.resolve(
-                execOps,
-                workDir,
-                gitBin.get(),
-                tagPrefix.get(),
-                initialVersion.get(),
-            ).nextTag
+        val tag = git.exactVersionTag(tagPrefix.get())
+        if (tag == null) {
+            log.warn("HEAD is not at a ${tagPrefix.get()}* tag; nothing to push.")
+            return
+        }
 
         log.arrow("Pushing tag $tag to $remote")
         val result = git.pushTag(remote, tag)

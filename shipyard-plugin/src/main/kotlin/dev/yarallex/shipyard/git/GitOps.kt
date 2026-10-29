@@ -15,6 +15,12 @@ class GitOps(private val execOps: ExecOperations, private val workingDir: File, 
         return out.takeIf { it.isNotBlank() }
     }
 
+    fun exactVersionTag(prefix: String): String? {
+        val out = capture(listOf(gitBin, "describe", "--tags", "--exact-match", "--match=$prefix*"))
+            ?: return null
+        return out.takeIf { it.isNotBlank() }
+    }
+
     fun logSince(rangeFromInclusiveExclusive: String?): String {
         val args = mutableListOf(gitBin, "log", "--format=%B%n---")
         if (rangeFromInclusiveExclusive != null) {

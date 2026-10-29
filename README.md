@@ -111,13 +111,13 @@ Either the `!` after the type or the `BREAKING CHANGE:` footer triggers MAJOR �
 | `currentVersion` | Print SemVer from the latest matching git tag. |
 | `nextVersion` | Print the next SemVer based on commits since the last tag. |
 | `tagVersion` | Create the next-version git tag locally (no push, no build). |
-| `pushTag` | Push the local version tag to `gitRemote`. |
+| `pushTag` | Push the version tag that sits on `HEAD` to `gitRemote`. No-op (with a warning) when `HEAD` carries no `tagPrefix*` tag. |
 | `dockerLogin` | Login to `registryHost` using env-var credentials. |
 | `dockerBuild` | Local-only build: `docker buildx build --load -t imageRepo:<version> -t imageRepo:latest .` Single platform (host's native arch) — `buildx --load` does not accept multiple platforms. For multi-arch use `dockerPush`. |
-| `dockerPush` | Build **and** push for all configured `platforms` in one buildx call: `docker buildx build --platform <csv> --push -t imageRepo:<version> -t imageRepo:latest .` |
+| `dockerPush` | Build **and** push for all configured `platforms` in one buildx call: `docker buildx build --platform <csv> --push -t imageRepo:<version> -t imageRepo:latest .` `<version>` is the `tagPrefix*` tag on `HEAD`; when `HEAD` is not tagged the task is a no-op (with a warning), so an already released version is never overwritten from a later commit. |
 | `dockerPushVersion` | Deprecated alias for `dockerPush`. |
 | `dockerPushLatest` | Deprecated alias for `dockerPush`. |
-| `ship` | Full pipeline: `tagVersion` → `dockerPush` → `pushTag`. |
+| `ship` | Full pipeline: `tagVersion` → `dockerPush` → `pushTag`. On a commit with no releasable changes (`tagVersion` skips) nothing is pushed: no image, no tag. |
 
 Multi-arch images must be pushed directly to the registry — buildx cannot `--load` more than one platform into the local daemon. So `dockerPush` is the only task that produces multi-arch output; `dockerBuild` is for local single-arch smoke tests.
 
@@ -161,6 +161,7 @@ All fields on the `shipyard { }` extension. Only `imageRepo` is required.
 | `dockerBin` | `String` | `"docker"` | Path or name of the docker CLI. |
 | `gitBin` | `String` | `"git"` | Path or name of the git CLI. |
 | `buildTaskName` | `String` | *(unset)* | Optional task name that must run before `dockerBuild` (e.g. `"bootJar"`, `"build"`). Leave unset for projects whose `Dockerfile` does the build itself. |
+| `prebuiltArtifact` | `RegularFile` | *(unset)* | Path to an artifact built elsewhere. When set, `dockerBuild` / `dockerPush` / `ship` skip `buildTaskName`; the file must exist and already sit where your `Dockerfile` expects it (shipyard does not copy it). Also settable per invocation: `./gradlew ship -Pshipyard.prebuiltArtifact=build/libs/app.jar` — ships the exact jar an earlier CI job built and tested. |
 | `requireCleanWorkingTree` | `Boolean` | `true` | `ship` aborts on a dirty working tree. Set `false` only for sandboxes. |
 | `envFile` | `RegularFile` | `<project>/.env` | File scanned for `registryUserEnv` / `registryTokenEnv` when they aren't set in the real environment. Real env vars always win. Missing file is silently ignored. |
 

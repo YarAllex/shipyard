@@ -24,6 +24,10 @@ class ShipyardPlugin : Plugin<Project> {
             platforms.convention(listOf("linux/amd64", "linux/arm64"))
             requireCleanWorkingTree.convention(true)
             envFile.convention(project.layout.projectDirectory.file(".env"))
+            val projectDir = project.layout.projectDirectory
+            prebuiltArtifact.convention(
+                project.providers.gradleProperty("shipyard.prebuiltArtifact").map { projectDir.file(it) },
+            )
         }
 
         val group = "shipyard"
@@ -90,6 +94,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.initialVersion.set(ext.initialVersion)
             it.platforms.set(project.provider { emptyList<String>() })
             it.push.set(false)
+            it.prebuiltArtifact.set(ext.prebuiltArtifact)
             it.mustRunAfter(tagVersion)
         }
 
@@ -107,6 +112,7 @@ class ShipyardPlugin : Plugin<Project> {
             it.initialVersion.set(ext.initialVersion)
             it.platforms.set(ext.platforms)
             it.push.set(true)
+            it.prebuiltArtifact.set(ext.prebuiltArtifact)
             it.dependsOn(dockerLogin)
             it.mustRunAfter(tagVersion)
         }
@@ -125,7 +131,7 @@ class ShipyardPlugin : Plugin<Project> {
 
         project.afterEvaluate {
             val name = ext.buildTaskName.orNull
-            if (!name.isNullOrBlank()) {
+            if (!name.isNullOrBlank() && !ext.prebuiltArtifact.isPresent) {
                 dockerBuild.configure { task -> task.dependsOn(name) }
                 dockerPush.configure { task -> task.dependsOn(name) }
             }
@@ -138,7 +144,6 @@ class ShipyardPlugin : Plugin<Project> {
             it.group = group
             it.description = "Push the local version tag to the configured remote."
             it.tagPrefix.set(ext.tagPrefix)
-            it.initialVersion.set(ext.initialVersion)
             it.gitBin.set(ext.gitBin)
             it.gitRemote.set(ext.gitRemote)
             it.mustRunAfter(tagVersion, dockerPush)
